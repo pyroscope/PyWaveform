@@ -2,13 +2,17 @@ from distutils.core import setup, Extension
 import subprocess
 
 # ---- edit these variables to configure -----
-mpg123_include_dir = '/usr/include/'
-mpg123_libs = 'mpg123'
-mpg123_lib_dir = '/usr/lib'
+mpg123_enabled = False # default off, problematic on too many systems
+mpg123_include_dirs = []
+mpg123_lib_dirs = []
+mpg123_libs = ['mpg123']
 # --------------------------------------------
 # note: it may be necessary to swap #include <Python.h> and #include <mpg123.h>
 #       depending on your architecture
 # --------------------------------------------
+
+if not mpg123_enabled:
+    mpg123_include_dirs, mpg123_lib_dirs, mpg123_libs = [], [], []
 
 p = subprocess.Popen(['MagickWand-config', '--cflags'], stdout=subprocess.PIPE)
 extra_compile_args = p.communicate()[0].strip().split()
@@ -21,11 +25,11 @@ cwaveform = Extension(
     sources = [
         'cwaveformmodule.c',
     ],
-    define_macros = [],
+    define_macros = [] if mpg123_enabled else [('WITHOUT_MPG123', '1')],
     undef_macros = [],
-    include_dirs=mpg123_include_dir.split(),
-    library_dirs=[mpg123_lib_dir],
-    libraries=['sndfile'] + mpg123_libs.split(),
+    include_dirs=['/usr/lib'] + mpg123_include_dirs,
+    library_dirs=['/usr/include/'] + mpg123_lib_dirs,
+    libraries=['sndfile'] + mpg123_libs,
     extra_compile_args=extra_compile_args,
     extra_link_args=extra_link_args,
 )

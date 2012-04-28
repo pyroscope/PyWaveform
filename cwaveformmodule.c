@@ -1,5 +1,7 @@
 #include "Python.h"
+#ifndef WITHOUT_MPG123
 #include <mpg123.h> // has to be before Python.h for some reason
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -9,6 +11,7 @@
 #include <sndfile.h>
 
 #include <wand/MagickWand.h>
+
 
 static PyObject *
 cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
@@ -50,7 +53,6 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
 
     int frameCount = -1;
     int channelCount = -1;
-    int frameSize = -1;
     const float sampleMin = (float) SHRT_MIN;
     const float sampleMax = (float) SHRT_MAX;
     const float sampleRange = (sampleMax - sampleMin);
@@ -59,13 +61,21 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
     SF_INFO sfInfo;
     short * frames = NULL;
 
+#ifndef WITHOUT_MPG123
     // mpg123 variables
+    int frameSize = -1;
     mpg123_handle * mh = NULL;
+#endif
 
     // try libsndfile
     memset(&sfInfo, 0, sizeof(SF_INFO));
     SNDFILE * sfFile = sf_open(inAudioFile, SFM_READ, &sfInfo);
     if (sfFile == NULL) {
+#ifdef WITHOUT_MPG123
+        // sndfile no good.
+        PyErr_SetString(PyExc_IOError, "Unrecognized audio format.");
+        return NULL;
+#else
         // sndfile no good. let's try mpg123.
         int err = mpg123_init();
         int encoding = 0;
@@ -96,6 +106,7 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
 
         int sampleCount = mpg123_length(mh);
         frameCount = sampleCount / channelCount;
+#endif
     } else {
         // sndfile is good. compute stuff
         frameCount = sfInfo.frames;
@@ -172,11 +183,13 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
         if (libToUse == 0) { // sndfile
             sf_seek(sfFile, start, SEEK_SET);
             sf_readf_short(sfFile, frames, framesToSee);
+#ifndef WITHOUT_MPG123
         } else if (libToUse == 1) {
             size_t done;
             mpg123_seek(mh, start*channelCount, SEEK_SET);
             mpg123_read(mh, (unsigned char *) frames, framesToSee*frameSize,
                 &done);
+#endif
         }
 
         // for each frame from start to end
@@ -246,11 +259,13 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
     if (libToUse == 0) {
         // libsndfile
         sf_close(sfFile);
+#ifndef WITHOUT_MPG123
     } else if (libToUse == 1) {
         // libmpg123
         mpg123_close(mh);
         mpg123_delete(mh);
         mpg123_exit();
+#endif
     }
 
     // no return value
@@ -269,7 +284,7 @@ static PyMethodDef cwaveform_methods[] = {
 
 /* Initialization function for the module (*must* be called initcwaveform) */
 
-void initcwaveform()
+void initcwaveform(void)
 {
     PyObject *m;
 
